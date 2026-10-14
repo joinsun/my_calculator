@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>크림 판매 정산 계산기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#E9EDF1;
+  --surface:#FFFFFF;
+  --ink:#17202B;
+  --muted:#5B6675;
+  --line:#D3D9E0;
+  --soft:#F3F5F8;
+  --accent:#1F4FD8;
+  --accent-ink:#FFFFFF;
+  --fee:#B4361C;
+  color-scheme:light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10151C;
+    --surface:#19212B;
+    --ink:#E8EDF3;
+    --muted:#95A1B0;
+    --line:#2C3846;
+    --soft:#212B37;
+    --accent:#7DA2FF;
+    --accent-ink:#0E1420;
+    --fee:#FF8A6B;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10151C;
+  --surface:#19212B;
+  --ink:#E8EDF3;
+  --muted:#95A1B0;
+  --line:#2C3846;
+  --soft:#212B37;
+  --accent:#7DA2FF;
+  --accent-ink:#0E1420;
+  --fee:#FF8A6B;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px);-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--ink);
+  font-family:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  font-variant-numeric:tabular-nums;
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+main{max-width:980px;margin:0 auto;padding:40px 20px 56px}
+header h1{font-size:1.75rem;line-height:1.25;font-weight:700;letter-spacing:-0.02em;margin:0 0 6px}
+header p{margin:0;color:var(--muted);font-size:.95rem;max-width:60ch}
+
+.grid{display:grid;grid-template-columns:minmax(0,1fr);gap:20px;margin-top:0}
+@media (min-width:800px){.grid{grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);align-items:start}}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:24px;min-width:0}
+.panel h2{font-size:1rem;font-weight:600;margin:0 0 16px}
+
+.field + .field{margin-top:22px}
+.field-label{display:block;font-size:.9rem;font-weight:600;margin-bottom:8px}
+.hint{font-size:.82rem;color:var(--muted);margin:8px 0 0}
+
+.price{
+  display:flex;align-items:baseline;gap:8px;
+  border-bottom:2px solid var(--ink);padding-bottom:6px;
+}
+.price input{
+  flex:1;min-width:0;width:100%;border:0;background:transparent;color:var(--ink);
+  font:inherit;font-size:2rem;font-weight:600;letter-spacing:-0.01em;padding:0;
+}
+.price input:focus{outline:none}
+.price:focus-within{border-color:var(--accent)}
+.price span{font-size:1.1rem;color:var(--muted);font-weight:500}
+
+fieldset{border:0;margin:0;padding:0;min-width:0}
+legend{padding:0}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+.mode{display:grid;grid-template-columns:1fr 1fr;background:var(--soft);border-radius:10px;padding:4px;gap:4px}
+.mode label{display:block;text-align:center;padding:9px 6px;border-radius:7px;font-size:.88rem;font-weight:500;cursor:pointer;color:var(--muted)}
+.mode input:checked + span{color:var(--ink)}
+.mode label:has(input:checked){background:var(--surface);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
+.mode label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
+
+.levels{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+.levels label{
+  display:flex;flex-direction:column;align-items:center;gap:0;line-height:1.25;
+  border:1px solid var(--line);border-radius:6px;padding:5px 2px;cursor:pointer;
+}
+.levels .lv{font-size:.8rem;color:var(--muted);font-weight:500}
+.levels .rt{font-size:.76rem;font-weight:600}
+.levels label:has(input:checked){background:var(--accent);border-color:var(--accent)}
+.levels label:has(input:checked) .lv,
+.levels label:has(input:checked) .rt{color:var(--accent-ink)}
+.levels label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
+
+[hidden]{display:none !important}
+
+/* 정산서 */
+.slip{position:relative;overflow:hidden;padding:0}
+.slip-top{padding:24px 24px 20px}
+.rows{margin:0}
+.rows div{display:flex;justify-content:space-between;gap:16px;padding:7px 0;font-size:.95rem}
+.rows dt{color:var(--muted)}
+.rows dt small{font-size:.82rem;margin-left:4px}
+.rows dd{margin:0;font-weight:500;text-align:right}
+.rows .minus{color:var(--fee)}
+.rows .sum{border-top:1px solid var(--line);margin-top:8px;padding-top:12px}
+.rows .sum dt{color:var(--ink);font-weight:600}
+.rows .sum dd{color:var(--fee);font-weight:700}
+
+.tear{position:relative;border-top:2px dashed var(--line);margin:0}
+.tear::before,.tear::after{
+  content:"";position:absolute;top:-12px;width:22px;height:22px;border-radius:50%;
+  background:var(--bg);border:1px solid var(--line);
+}
+.tear::before{left:-12px}
+.tear::after{right:-12px}
+
+.net{padding:22px 24px 26px}
+.net-row{display:flex;justify-content:space-between;align-items:baseline;gap:16px}
+.net-label{margin:0;font-size:.95rem;font-weight:600}
+.net-value{margin:0;font-size:1.1rem;line-height:1.4;font-weight:700;color:var(--accent);text-align:right;word-break:break-all}
+.net-value.neg{color:var(--fee)}
+.net-sub{margin:8px 0 0;font-size:.88rem;color:var(--muted)}
+
+/* 등급별 비교 */
+.compare{margin-top:20px}
+.compare p.lead{margin:-8px 0 14px;color:var(--muted);font-size:.88rem}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.92rem;min-width:620px}
+th,td{text-align:right;padding:10px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}
+th{font-size:.82rem;font-weight:600;color:var(--muted)}
+tbody tr.on td{background:var(--soft);font-weight:600}
+tbody tr.on td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+td.fee{color:var(--fee)}
+
+.notes{margin:24px 0 0;padding:0;list-style:none;color:var(--muted);font-size:.84rem;max-width:72ch}
+.notes li{padding-left:14px;position:relative;margin-top:6px}
+.notes li::before{content:"";position:absolute;left:0;top:.7em;width:5px;height:1px;background:var(--muted)}
+
+.levels.cur{grid-template-columns:repeat(4,1fr)}
+.buy{margin-top:0}
+.price input#price{font-size:1.6rem}
+.field-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.field-head .field-label{margin:0}
+.select-wrap{position:relative;display:inline-flex}
+.select-wrap::after{content:"";position:absolute;right:10px;top:50%;width:6px;height:6px;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:translateY(-70%) rotate(45deg);pointer-events:none}
+.level-select{appearance:none;-webkit-appearance:none;font:inherit;font-size:.82rem;font-weight:600;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:3px 26px 3px 9px;cursor:pointer}
+.level-select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.buy input{font-size:1.6rem}
+.fx{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;font-size:.84rem;color:var(--muted);white-space:nowrap}
+.buy-row{display:grid;grid-template-columns:minmax(0,1fr);align-items:end;gap:12px;margin-top:12px}
+.buy-row.fx-on{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)}
+.buy-arrow{color:var(--muted);font-size:1.1rem;padding-bottom:10px}
+.buy-krw-box{display:flex;align-items:baseline;gap:8px;min-width:0;border-bottom:2px solid var(--line);padding-bottom:6px}
+.buy-krw-box .buy-krw{flex:1;min-width:0;font-size:1.6rem;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.buy-krw-box .krw-unit{font-size:1.1rem;color:var(--muted);font-weight:500}
+.buy-row.fx-on .buy input,.buy-row.fx-on .buy-krw{font-size:1.35rem}
+.fx-rate-wrap{display:flex;align-items:center;gap:6px}
+.fx-note{font-size:.8rem}
+.fx input{width:6.2em;font:inherit;font-size:.84rem;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:4px 8px;text-align:right}
+.fx input:focus-visible,.fx button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.fx button{font:inherit;font-size:.95rem;line-height:1;color:var(--accent);background:none;border:0;padding:4px;cursor:pointer}
+@media (max-width:360px){.fx{flex-wrap:wrap}}
+.profit{margin-top:16px;border-top:1px solid var(--line);padding-top:8px}
+.rows .sum dd.pos{color:var(--accent)}
+.rows .fee-total dt{color:var(--ink)}
+.rows .fee-group{display:block;padding:0;cursor:pointer}
+.rows .fee-details{display:none;padding:0 0 4px}
+.rows .fee-group.open .fee-details{display:block}
+.fee-toggle{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+.fee-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.fee-toggle .chev{width:6px;height:6px;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:translateY(-2px) rotate(45deg);transition:transform .15s}
+.fee-group.open .chev{transform:translateY(1px) rotate(-135deg)}
+@media (prefers-reduced-motion:reduce){.fee-toggle .chev{transition:none}}
+.rows .fee-total dd{color:var(--fee);font-weight:600}
+.rows .detail{position:relative;padding:2px 0 2px 14px;font-size:.84rem}
+.rows .detail::before{content:"";position:absolute;left:4px;top:0;bottom:0;border-left:1px solid var(--line)}
+.rows .detail dt,.rows .detail dd{color:var(--muted);font-weight:400}
+.rows .detail dt small{font-size:.78rem}
+.rows .roi dt{color:var(--ink);font-weight:600}
+.rows .roi dd{color:var(--fee);font-weight:700}
+.rows .roi dd.pos{color:var(--accent)}
+
+@media (max-width:420px){
+  .fx input,.level-select{font-size:16px}
+  .fx{font-size:.8rem;gap:6px}
+  .fx input{width:5.6em;padding:3px 6px}
+  .buy-row.fx-on{gap:8px}
+  .buy-row.fx-on .buy input,.buy-row.fx-on .buy-krw{font-size:1.2rem}
+  main{padding:28px 16px 40px}
+  .panel{padding:20px}
+  .slip-top{padding:20px 20px 16px}
+  .net{padding:20px 20px 22px}
+  .levels .rt{font-size:.72rem}
+}
+</style>
+</head>
+<body>
+<main>
+  <h1 class="sr">크림 판매 정산 계산기</h1>
+
+  <div class="grid">
+    <section class="panel" aria-labelledby="in-title">
+      <h2 id="in-title">판매 정보</h2>
+
+      <fieldset class="field">
+        <legend class="field-label">구매가</legend>
+        <div class="levels cur">
+          <label><input class="sr" type="radio" name="cur" value="KRW" checked aria-label="원화"><span class="lv">₩ KRW</span></label>
+          <label><input class="sr" type="radio" name="cur" value="JPY" aria-label="엔화"><span class="lv">¥ JPY</span></label>
+          <label><input class="sr" type="radio" name="cur" value="USD" aria-label="달러"><span class="lv">$ USD</span></label>
+          <label><input class="sr" type="radio" name="cur" value="THB" aria-label="바트"><span class="lv">฿ THB</span></label>
+        </div>
+        <div class="buy-row" id="buy-row">
+        <div class="price buy">
+          <input id="buy" type="text" inputmode="decimal" autocomplete="off" placeholder="0" aria-label="구매가 금액" aria-describedby="buy-hint">
+          <span id="buy-unit">원</span>
+        </div>
+        <span class="buy-arrow" id="buy-arrow" hidden aria-hidden="true">→</span>
+        <div class="buy-krw-box" id="buy-krw-box" hidden aria-label="원화 환산 금액">
+          <span class="buy-krw" id="buy-krw">0</span><span class="krw-unit">원</span>
+        </div>
+        </div>
+        <div class="fx" id="fx-box" hidden>
+          <span class="fx-rate-wrap">
+            <label for="fx-rate"><span id="fx-unit">1달러</span> =</label>
+            <input id="fx-rate" type="text" inputmode="decimal" autocomplete="off">
+            <span>원</span>
+            <button type="button" id="fx-reset" hidden aria-label="기준 환율로 되돌리기" title="기준 환율로 되돌리기">↺</button>
+          </span>
+          <span class="fx-note" id="fx-note"></span>
+        </div>
+        <p class="hint" id="buy-hint">구매가를 넣으면 예상 수익을 계산해요.</p>
+      </fieldset>
+
+      <div class="field">
+        <div class="field-head">
+          <label class="field-label" for="price">판매가</label>
+          <span class="select-wrap"><select id="level" class="level-select" aria-label="판매자 등급"></select></span>
+        </div>
+        <div class="price">
+          <input id="price" type="text" inputmode="numeric" autocomplete="off" placeholder="0" value="250,000" aria-describedby="level-hint">
+          <span>원</span>
+        </div>
+        <p class="hint" id="level-hint"></p>
+      </div>
+    </section>
+
+    <section class="panel slip" aria-labelledby="slip-title">
+      <div class="slip-top">
+        <h2 id="slip-title">정산 내역</h2>
+        <dl class="rows">
+          <div><dt>판매가</dt><dd id="o-price">0원</dd></div>
+          <div class="fee-group" id="fee-group">
+            <div class="fee-total"><dt><button type="button" class="fee-toggle" id="fee-toggle" aria-expanded="false" aria-controls="fee-details">수수료<span class="chev" aria-hidden="true"></span></button></dt><dd id="o-total">0원</dd></div>
+            <div class="fee-details" id="fee-details">
+              <div class="detail"><dt>등급 수수료<small id="o-rate"></small></dt><dd id="o-gf">0원</dd></div>
+              <div class="detail"><dt>기본 수수료</dt><dd id="o-base">0원</dd></div>
+              <div class="detail"><dt>부가세 10%</dt><dd id="o-vat">0원</dd></div>
+              <div class="detail" id="row-cap" hidden><dt>상한 조정<small>최대 30만원</small></dt><dd id="o-cap">0원</dd></div>
+            </div>
+          </div>
+        </dl>
+      </div>
+      <div class="tear" aria-hidden="true"></div>
+      <div class="net" aria-live="polite">
+        <div class="net-row">
+          <p class="net-label">정산 예정 금액</p>
+          <p class="net-value" id="o-net">0원</p>
+        </div>
+        <p class="net-sub" id="o-sub">판매가를 입력하면 계산돼요.</p>
+        <dl class="rows profit" id="profit-box" hidden>
+          <div><dt>구매가<small id="o-buy-src"></small></dt><dd class="minus" id="o-buy">0원</dd></div>
+          <div class="sum"><dt>예상 수익</dt><dd id="o-profit">0원</dd></div>
+          <div class="roi"><dt>수익률</dt><dd id="o-roi">0%</dd></div>
+        </dl>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel compare" aria-labelledby="cmp-title">
+    <h2 id="cmp-title">등급별로 비교하기</h2>
+    <p class="lead" id="cmp-lead">같은 판매가일 때 등급마다 수수료와 정산 금액이 이렇게 달라져요.</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>등급</th><th>전월 정산 금액</th><th>수수료율</th><th>총 수수료</th><th>정산 금액</th><th>예상 수익</th></tr>
+        </thead>
+        <tbody id="cmp-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <ul class="notes">
+    <li>KREAM 판매자 등급별 수수료(일반 카테고리) 기준이에요. 기본 수수료 2,500원과 등급 수수료를 더한 금액에 부가세 10%가 붙어요.</li>
+    <li>수수료 합계(부가세 포함)는 거래 한 건당 최대 30만원까지만 부과돼요.</li>
+    <li>등급은 전월 1일부터 말일까지의 정산 금액으로 정해지고, 당월 2일부터 다음 달 1일까지 적용돼요.</li>
+    <li>환율 기본값은 2026년 10월 13일 기준이에요. 달러·엔화는 네이버 환율에 표시되는 하나은행 매매기준율이고, 바트는 같은 시기 시장 환율이에요. 오늘 네이버 환율로 계산하려면 환율 칸에 직접 입력하세요.</li>
+    <li>검수센터 발송 택배비, 창고 이용료, 페널티는 포함하지 않았어요. 원 단위 반올림 추정치라 실제 정산과 몇 원 차이가 날 수 있어요.</li>
+  </ul>
+</main>
+
+<script>
+(function(){
+  var LEVELS = [
+    {lv:1, cond:'200만원 미만',                      gen:6.00, prem:3.0},
+    {lv:2, cond:'200만~1,000만원 미만 (또는 10건 이상)', gen:5.85, prem:2.9},
+    {lv:3, cond:'1,000만~2,000만원 미만',             gen:5.70, prem:2.8},
+    {lv:4, cond:'2,000만~6,000만원 미만',             gen:5.60, prem:2.7},
+    {lv:5, cond:'6,000만원 이상',                     gen:5.50, prem:2.6}
+  ];
+  var BASE = 2500, CAP = 300000;
+  var FX_DATE = '2026-10-13';
+  var FX = {
+    JPY: { rate:844.78, per:100, unit:'엔',  dec:0 },
+    USD: { rate:1338.00, per:1,  unit:'달러', dec:2 },
+    THB: { rate:39.69,  per:1,   unit:'바트', dec:2 }
+  };
+  var UNIT = { KRW:'원', JPY:'엔', USD:'달러', THB:'바트' };
+
+  var $ = function(id){ return document.getElementById(id); };
+  var priceEl = $('price'), buyEl = $('buy'), fxEl = $('fx-rate');
+  var state = { cat:'general', level:1, cur:'KRW', fx:{}, fxDate:FX_DATE };
+
+  try {
+    var saved = JSON.parse(localStorage.getItem('kream-calc-v2') || 'null');
+    if (saved && saved.level >= 1 && saved.level <= 5) state.level = saved.level;
+    if (saved && (saved.cur === 'KRW' || FX[saved.cur])) state.cur = saved.cur;
+    if (saved && saved.fxDate === FX_DATE && saved.fx && typeof saved.fx === 'object') state.fx = saved.fx;
+  } catch(e) {}
+
+  function save(){
+    try { localStorage.setItem('kream-calc-v2', JSON.stringify(state)); } catch(e) {}
+  }
+
+  function won(n){ return Math.round(n).toLocaleString('ko-KR') + '원'; }
+  function minus(n){ return n > 0 ? '−' + won(n) : won(0); }
+  function digits(s){ return parseInt(String(s).replace(/[^0-9]/g,''), 10) || 0; }
+  function parseAmt(s){ var v = parseFloat(String(s).replace(/,/g,'').replace(/[^0-9.]/g,'')); return isNaN(v) ? 0 : v; }
+  function signed(n){ return n === 0 ? won(0) : (n < 0 ? '−' : '+') + won(Math.abs(n)); }
+  function fmtRate(r){ return r.toLocaleString('ko-KR', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+  function rateNow(cur){ var v = state.fx[cur]; return (typeof v === 'number' && v >= 0) ? v : FX[cur].rate; }
+  function buyKRW(){
+    var a = parseAmt(buyEl.value);
+    if (state.cur === 'KRW') return Math.round(a);
+    return Math.round(a * rateNow(state.cur) / FX[state.cur].per);
+  }
+  function pct(r){ return r.toFixed(state.cat === 'premium' ? 1 : 2) + '%'; }
+  function rateOf(L){ return state.cat === 'premium' ? L.prem : L.gen; }
+
+  function calc(price, ratePct, base){
+    var gf = Math.round(price * ratePct / 100);
+    var supply = gf + base;
+    var vat = Math.round(supply * 0.1);
+    var raw = supply + vat;
+    var total = Math.min(raw, CAP);
+    return { gf:gf, base:base, vat:vat, raw:raw, total:total, adj:raw-total, net:price-total };
+  }
+
+  // 등급 버튼 만들기
+  var levelSel = $('level');
+  LEVELS.forEach(function(L){
+    var o = document.createElement('option');
+    o.value = L.lv;
+    o.textContent = 'Lv.' + L.lv + ' · ' + pct(rateOf(L));
+    levelSel.appendChild(o);
+  });
+
+  function currentRule(){
+    var L = LEVELS[state.level - 1];
+    return { rate: rateOf(L), base: BASE };
+  }
+
+  function render(){
+    var price = digits(priceEl.value);
+    var rule = currentRule();
+    var r = calc(price, rule.rate, rule.base);
+
+    $('o-price').textContent = won(price);
+    $('o-rate').textContent = pct(rule.rate);
+    $('o-gf').textContent = won(r.gf);
+    $('o-base').textContent = won(r.base);
+    $('o-vat').textContent = won(r.vat);
+    $('row-cap').hidden = r.adj <= 0;
+    $('o-cap').textContent = '−' + won(r.adj);
+    $('o-total').textContent = minus(r.total);
+
+    var netEl = $('o-net'), sub = $('o-sub');
+    netEl.textContent = (r.net < 0 ? '−' + won(-r.net) : won(r.net));
+    netEl.classList.toggle('neg', r.net < 0);
+    if (price === 0) {
+      sub.textContent = '판매가를 입력하면 계산돼요.';
+    } else if (r.net < 0) {
+      sub.textContent = '수수료가 판매가보다 커서 정산받을 금액이 없어요.';
+    } else {
+      var effective = r.total / price * 100;
+      sub.textContent = '실질 수수료율 ' + effective.toFixed(2) + '% · 판매가의 ' + (100 - effective).toFixed(1) + '%를 받아요.';
+    }
+
+    var cur = state.cur, isFx = cur !== 'KRW';
+    var buyAmt = parseAmt(buyEl.value), hasBuy = buyAmt > 0, buy = buyKRW();
+    var edited = isFx && typeof state.fx[cur] === 'number' && state.fx[cur] !== FX[cur].rate;
+    $('buy-unit').textContent = UNIT[cur];
+    $('fx-box').hidden = !isFx;
+    if (isFx) {
+      $('fx-unit').textContent = (FX[cur].per === 100 ? '100' : '1') + FX[cur].unit;
+      if (document.activeElement !== fxEl) fxEl.value = fmtRate(rateNow(cur));
+      $('fx-reset').hidden = !edited;
+    }
+    $('buy-row').classList.toggle('fx-on', isFx);
+    $('buy-arrow').hidden = !isFx;
+    $('buy-krw-box').hidden = !isFx;
+    if (isFx) $('buy-krw').textContent = buy.toLocaleString('ko-KR');
+    var hint = $('buy-hint');
+    hint.hidden = isFx;
+    if (isFx) $('fx-note').textContent = edited ? '직접 입력한 환율' : FX_DATE.replace(/-/g,'.') + ' 기준';
+    else if (!hasBuy) hint.textContent = '구매가를 넣으면 예상 수익을 계산해요.';
+    else hint.textContent = '예상 수익은 정산 내역에서 확인하세요.';
+
+    $('profit-box').hidden = !hasBuy;
+    if (hasBuy) {
+      var profit = r.net - buy;
+      $('o-buy-src').textContent = isFx ? buyEl.value + UNIT[cur] : '';
+      $('o-buy').textContent = minus(buy);
+      var pEl = $('o-profit');
+      pEl.textContent = signed(profit);
+      pEl.classList.toggle('pos', profit >= 0);
+      var roiEl = $('o-roi'), roi = buy > 0 ? profit / buy * 100 : 0;
+      roiEl.textContent = (roi > 0 ? '+' : roi < 0 ? '−' : '') + Math.abs(roi).toFixed(1) + '%';
+      roiEl.classList.toggle('pos', roi >= 0);
+    }
+
+    var L = LEVELS[state.level - 1];
+    $('level-hint').textContent = '판매자 등급 기준: 전월 정산 ' + L.cond;
+
+    var rows = '';
+    LEVELS.forEach(function(lv){
+      var c = calc(price, rateOf(lv), BASE);
+      var on = lv.lv === state.level ? ' class="on"' : '';
+      rows += '<tr'+on+'><td>Lv.'+lv.lv+'</td><td>'+lv.cond+'</td><td>'+pct(rateOf(lv))+'</td>' +
+              '<td class="fee">'+won(c.total)+'</td><td>'+(c.net<0?'−'+won(-c.net):won(c.net))+'</td>' +
+              '<td>'+(hasBuy ? signed(c.net - buy) : '—')+'</td></tr>';
+    });
+    $('cmp-body').innerHTML = rows;
+  }
+
+  function syncControls(){
+    levelSel.value = String(state.level);
+    document.querySelectorAll('input[name="cur"]').forEach(function(i){ i.checked = i.value === state.cur; });
+  }
+
+  function formatAmt(el, dec){
+    var v = String(el.value).replace(/[^0-9.]/g,'');
+    if (!dec) v = v.replace(/\./g,'');
+    var parts = v.split('.');
+    var i = parts[0].replace(/^0+(?=\d)/,'').slice(0,12);
+    var d = parts.length > 1 ? '.' + parts.slice(1).join('').slice(0,dec) : '';
+    el.value = (i ? parseInt(i,10).toLocaleString('ko-KR') : (d ? '0' : '')) + d;
+  }
+  function buyDec(){ return state.cur === 'KRW' ? 0 : FX[state.cur].dec; }
+
+  function formatMoneyInput(el){
+    var n = String(el.value).replace(/[^0-9]/g,'').slice(0,12);
+    el.value = n ? parseInt(n,10).toLocaleString('ko-KR') : '';
+  }
+
+  priceEl.addEventListener('input', function(){ formatMoneyInput(priceEl); render(); });
+  $('fee-group').addEventListener('click', function(){
+    var open = this.classList.toggle('open');
+    $('fee-toggle').setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  buyEl.addEventListener('input', function(){ formatAmt(buyEl, buyDec()); render(); });
+  fxEl.addEventListener('input', function(){
+    formatAmt(fxEl, 2);
+    state.fx[state.cur] = parseAmt(fxEl.value);
+    save(); render();
+  });
+  fxEl.addEventListener('blur', function(){ render(); });
+  $('fx-reset').addEventListener('click', function(){
+    delete state.fx[state.cur];
+    fxEl.value = fmtRate(FX[state.cur].rate);
+    save(); render(); fxEl.focus();
+  });
+  document.querySelectorAll('input[name="cur"]').forEach(function(i){
+    i.addEventListener('change', function(){
+      state.cur = i.value; syncControls(); formatAmt(buyEl, buyDec()); save(); render();
+    });
+  });
+  levelSel.addEventListener('change', function(){ state.level = +levelSel.value; save(); render(); });
+
+  syncControls();
+  render();
+})();
+</script>
+</body>
+</html>
