@@ -312,7 +312,8 @@ td.fee{color:var(--fee)}
     <li>KREAM 판매자 등급별 수수료(일반 카테고리) 기준이에요. 기본 수수료 2,500원과 등급 수수료를 더한 금액에 부가세 10%가 붙어요.</li>
     <li>수수료 합계(부가세 포함)는 거래 한 건당 최대 30만원까지만 부과돼요.</li>
     <li>등급은 전월 1일부터 말일까지의 정산 금액으로 정해지고, 당월 2일부터 다음 달 1일까지 적용돼요.</li>
-    <li>환율 기본값은 2026년 10월 13일 기준이에요. 달러·엔화는 네이버 환율에 표시되는 하나은행 매매기준율이고, 바트는 같은 시기 시장 환율이에요. 오늘 네이버 환율로 계산하려면 환율 칸에 직접 입력하세요.</li>
+    <li>환율은 페이지를 열 때마다 무료 환율 서비스에서 최신 시장 환율을 받아와요. 환율 칸 옆에 언제 기준인지 표시돼요. 네이버 환율(하나은행 매매기준율)과는 몇 원 차이가 날 수 있어요.</li>
+    <li>최신 환율을 불러오지 못하면 2026년 10월 13일 기준값으로 계산해요. 환율 칸을 직접 고치면 그 값으로 계산되고, 새로고침하면 다시 최신 환율로 돌아가요.</li>
     <li>검수센터 발송 택배비, 창고 이용료, 페널티는 포함하지 않았어요. 원 단위 반올림 추정치라 실제 정산과 몇 원 차이가 날 수 있어요.</li>
   </ul>
 </main>
@@ -337,17 +338,66 @@ td.fee{color:var(--fee)}
 
   var $ = function(id){ return document.getElementById(id); };
   var priceEl = $('price'), buyEl = $('buy'), fxEl = $('fx-rate');
-  var state = { cat:'general', level:1, cur:'KRW', fx:{}, fxDate:FX_DATE };
+  var state = { cat:'general', level:1, cur:'KRW', fx:{} };
+  var fxLabel = '환율 불러오는 중…';
 
   try {
     var saved = JSON.parse(localStorage.getItem('kream-calc-v2') || 'null');
     if (saved && saved.level >= 1 && saved.level <= 5) state.level = saved.level;
     if (saved && (saved.cur === 'KRW' || FX[saved.cur])) state.cur = saved.cur;
-    if (saved && saved.fxDate === FX_DATE && saved.fx && typeof saved.fx === 'object') state.fx = saved.fx;
   } catch(e) {}
 
   function save(){
-    try { localStorage.setItem('kream-calc-v2', JSON.stringify(state)); } catch(e) {}
+    try { localStorage.setItem('kream-calc-v2', JSON.stringify({ level:state.level, cur:state.cur })); } catch(e) {}
+  }
+
+  // 최신 환율 불러오기 (실패하면 FX 기본값 사용)
+  function pad(n){ return (n < 10 ? '0' : '') + n; }
+  function getJSON(url){
+    var ctl = window.AbortController ? new AbortController() : null;
+    var t = setTimeout(function(){ if (ctl) ctl.abort(); }, 6000);
+    return fetch(url, ctl ? { signal:ctl.signal, cache:'no-store' } : { cache:'no-store' })
+      .then(function(r){ clearTimeout(t); if (!r.ok) throw new Error('http'); return r.json(); });
+  }
+  function applyRates(krwPerUsd, jpyPerUsd, thbPerUsd, label){
+    var ok = [krwPerUsd, jpyPerUsd, thbPerUsd].every(function(v){ return typeof v === 'number' && isFinite(v) && v > 0; });
+    if (!ok || krwPerUsd < 500 || krwPerUsd > 5000) throw new Error('bad');
+    FX.USD.rate = Math.round(krwPerUsd * 100) / 100;
+    FX.JPY.rate = Math.round(krwPerUsd / jpyPerUsd * 100 * 100) / 100;
+    FX.THB.rate = Math.round(krwPerUsd / thbPerUsd * 100) / 100;
+    fxLabel = label;
+  }
+  function loadLiveRates(){
+    var sources = [
+      function(){
+        return getJSON('https://open.er-api.com/v6/latest/USD').then(function(j){
+          if (!j || j.result !== 'success' || !j.rates) throw new Error('bad');
+          var d = new Date(j.time_last_update_unix * 1000);
+          applyRates(j.rates.KRW, j.rates.JPY, j.rates.THB,
+            d.getFullYear() + '.' + pad(d.getMonth()+1) + '.' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ' 기준');
+        });
+      },
+      function(){
+        return getJSON('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json').then(function(j){
+          if (!j || !j.usd) throw new Error('bad');
+          applyRates(j.usd.krw, j.usd.jpy, j.usd.thb, String(j.date || '').replace(/-/g,'.') + ' 기준');
+        });
+      },
+      function(){
+        return getJSON('https://latest.currency-api.pages.dev/v1/currencies/usd.json').then(function(j){
+          if (!j || !j.usd) throw new Error('bad');
+          applyRates(j.usd.krw, j.usd.jpy, j.usd.thb, String(j.date || '').replace(/-/g,'.') + ' 기준');
+        });
+      }
+    ];
+    var i = 0;
+    (function next(){
+      if (i >= sources.length) { fxLabel = FX_DATE.replace(/-/g,'.') + ' 기준값'; render(); return; }
+      var src = sources[i++];
+      try {
+        src().then(function(){ render(); }, next);
+      } catch(e) { next(); }
+    })();
   }
 
   function won(n){ return Math.round(n).toLocaleString('ko-KR') + '원'; }
@@ -430,7 +480,7 @@ td.fee{color:var(--fee)}
     if (isFx) $('buy-krw').textContent = buy.toLocaleString('ko-KR');
     var hint = $('buy-hint');
     hint.hidden = isFx;
-    if (isFx) $('fx-note').textContent = edited ? '직접 입력한 환율' : FX_DATE.replace(/-/g,'.') + ' 기준';
+    if (isFx) $('fx-note').textContent = edited ? '직접 입력한 환율' : fxLabel;
     else if (!hasBuy) hint.textContent = '구매가를 넣으면 예상 수익을 계산해요.';
     else hint.textContent = '예상 수익은 정산 내역에서 확인하세요.';
 
@@ -507,6 +557,7 @@ td.fee{color:var(--fee)}
 
   syncControls();
   render();
+  if (window.fetch) loadLiveRates(); else { fxLabel = FX_DATE.replace(/-/g,'.') + ' 기준값'; render(); }
 })();
 </script>
 </body>
